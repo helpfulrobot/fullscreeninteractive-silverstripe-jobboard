@@ -16,6 +16,6 @@
 		$ApplyContent
 		
 		
-		<p id="GoBackHome"><a href="home/">See The Full List of Jobs</a> <a href="$Top.Link(edit)/$ID" class="button">Edit Listing</a> <a class="button" href="$Top.Link(delete)/$ID">Delete</a></p>
+		<p id="GoBackHome"><a href="$Top.Link">See The Full List of Jobs</a> <a href="$Top.Link(edit)/$ID" class="button">Edit Listing</a> <a class="button" href="$Top.Link(delete)/$ID">Delete</a></p>
 	<% end_control %>
 <% end_if %>
