@@ -56,7 +56,7 @@ class Job extends DataObject {
 	 * @param array
 	 */
 	public static function get_required_fields() {
-		return self::$required_files;
+		return self::$required_fields;
 	}
 	
 	/**
