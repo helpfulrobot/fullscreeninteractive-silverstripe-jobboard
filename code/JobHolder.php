@@ -12,6 +12,7 @@ class JobHolder extends Page {
 	static $db = array(
 		'TermsAndConditionsText' => 'HTMLText',
 		'EmailFromAddress' => 'Varchar',
+		'EmailSubject' => 'Varchar',
 		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC", "RAND()")'
 	);
 	
@@ -20,8 +21,8 @@ class JobHolder extends Page {
 		
 		$fields->addFieldsToTab('Root.Content.JobOptions', array(
 			new HtmlEditorField('TermsAndConditionsText', _t('JobHolder.TERMSANDCONDITIONS', 'Terms and Conditions text')),
-			new EmailField('EmailFromAddress', _t('JobHolder.FROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
-			new TextField('')
+			new EmailField('EmailFromAddress', _t('JobHolder.POSTEDFROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
+			new TextField('EmailSubject', _t('JobHolder.POSTEDEMAILSUBJECT', 'Job posted email subject')),
 			new DropdownField('JobSortMode', _t('JobHolder.JOBLISTINGSORT', 'Job Listing Sort', array(
 				'RAND()' => _t('JobHolder.RANDOM', 'Random'),
 				'Created DESC' => _t('JobHolder.CREATEDDESC', 'Created Descending'),
@@ -59,7 +60,8 @@ class JobHolder_Controller extends Page_Controller {
 	 */
 	function index() {
 		return array(
-			'Jobs' => DataObject::get('Job', "\"isActive\" = '1'", $this->JobSortMode);
+			'Jobs' => DataObject::get('Job', "\"isActive\" = '1'", $this->JobSortMode),
+			'ShowJobs' => true
 		);
 	}
 
@@ -168,7 +170,7 @@ class JobHolder_Controller extends Page_Controller {
 		$job->MemberID = $member->ID;
 		$job->write();
 		
-		return $this->redirect($this->Link('thanks');
+		return $this->redirect($this->Link('thanks'));
 	}
 
 	/**
@@ -273,7 +275,7 @@ class JobHolder_Controller extends Page_Controller {
 			$job->write();
 		}
 		
-		return $this->redirect($this->Link('updated');	
+		return $this->redirect($this->Link('updated'));
 	}
 	
 	function delete() {
