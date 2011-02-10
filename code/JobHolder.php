@@ -143,16 +143,15 @@ class JobHolder_Controller extends Page_Controller {
 		$subject = ($this->EmailSubject) ? $this->EmailSubject : _t('JobHolder.EMAILSUBJECT', 'Thanks for your job listing');
 		
 		$email = new Email($from, $data['Email'], $subject);
-		$first = false;
+		$password = false;
 		if(!$member) {
 			$member = new Member();
 			$member->Email = $SQL_email;
-			$member->FirstName = $data['Company'];
+			$member->FirstName = isset($data['Company']) ? $data['Company'] : false;
 			$password = Member::create_new_password();
 			$member->Password = $password;
 			$member->write();
 			$member->addToGroupByCode('job-posters', _t('JobHolder.JOBPOSTERSGROUP','Job Posters'));
-			$first = true;
 		}
 			
 		// send the welcome email.
@@ -160,7 +159,7 @@ class JobHolder_Controller extends Page_Controller {
 		$email->populateTemplate(array(
 			'Member' => $member,
 			'Password' => $password,
-			'FirstPost' => $first,
+			'FirstPost' => ($password) ? true : false,
 			'Job' => $job
 		));
 		
@@ -251,7 +250,7 @@ class JobHolder_Controller extends Page_Controller {
 			if(!$member) {
 				$member = new Member();
 				$member->Email = $SQL_email;
-				$member->FirstName = $data['Company'];
+				$member->FirstName = isset($data['Company']) ? $data['Company'] : false;
 				$password = Member::create_new_password();
 				$member->Password = $password;
 				$member->write();
