@@ -15,7 +15,7 @@
 	<p>You can view it online at <a href="$Job.AbsoluteLink">$Job.AbsoluteLink</a></p>
 
 	<h3>Listing Details</h3>
-	<p>If you would like to remove your listing or edit the details you can make changes to it at <a href="$Job.AbsoluteLink(edit)/$Job.ID">$Job.AbsoluteLink(edit)/$Job.ID/a></p>
+	<p>If you would like to remove your listing or edit the details you can make changes to it at <a href="$Job.AbsoluteLink(edit)/$Job.ID">$Job.AbsoluteLink(edit)/$Job.ID</a></p>
 	<p><strong>Title:</strong> $Job.Title</p>
 <% end_if %>
 	
