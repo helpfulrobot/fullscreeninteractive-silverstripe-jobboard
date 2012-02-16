@@ -13,6 +13,7 @@ class JobHolder extends Page {
 		'TermsAndConditionsText' => 'HTMLText',
 		'EmailFromAddress' => 'Varchar',
 		'EmailSubject' => 'Varchar',
+		'NotifyAddress' => 'Varchar(100)',
 		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC", "RAND()")'
 	);
 	
@@ -22,6 +23,7 @@ class JobHolder extends Page {
 		$fields->addFieldsToTab('Root.Content.JobOptions', array(
 			new HtmlEditorField('TermsAndConditionsText', _t('JobHolder.TERMSANDCONDITIONS', 'Terms and Conditions text')),
 			new EmailField('EmailFromAddress', _t('JobHolder.POSTEDFROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
+			new EmailField('NotifyAddress', _t('JobHolder.NOTIFYEMAILADDRESS', 'Email to notify when job posted')),
 			new TextField('EmailSubject', _t('JobHolder.POSTEDEMAILSUBJECT', 'Job posted email subject')),
 			new DropdownField('JobSortMode', _t('JobHolder.JOBLISTINGSORT', 'Job Listing Sort', array(
 				'RAND()' => _t('JobHolder.RANDOM', 'Random'),
@@ -163,8 +165,11 @@ class JobHolder_Controller extends Page_Controller {
 			'Job' => $job
 		));
 		
+		if($this->NotifyAddress) 
+			$email->setBcc($this->NotifyAddress);
+			
 		$member->logIn();
-		
+					
 		$email->send();
 		$job->MemberID = $member->ID;
 		$job->write();
