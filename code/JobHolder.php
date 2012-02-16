@@ -14,7 +14,7 @@ class JobHolder extends Page {
 		'EmailFromAddress' => 'Varchar',
 		'EmailSubject' => 'Varchar',
 		'NotifyAddress' => 'Varchar(100)',
-		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC", "RAND()")'
+		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC, LastEdited DESC, LastEdited ASC", "RAND()")'
 	);
 	
 	function getCMSFields() {
@@ -25,10 +25,12 @@ class JobHolder extends Page {
 			new EmailField('EmailFromAddress', _t('JobHolder.POSTEDFROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
 			new EmailField('NotifyAddress', _t('JobHolder.NOTIFYEMAILADDRESS', 'Email to notify when job posted')),
 			new TextField('EmailSubject', _t('JobHolder.POSTEDEMAILSUBJECT', 'Job posted email subject')),
-			new DropdownField('JobSortMode', _t('JobHolder.JOBLISTINGSORT', 'Job Listing Sort', array(
+			new DropdownField('JobSortMode', _t('JobHolder.JOBLISTINGSORT', 'Job Listing Sort'), array(
 				'RAND()' => _t('JobHolder.RANDOM', 'Random'),
 				'Created DESC' => _t('JobHolder.CREATEDDESC', 'Created Descending'),
-				'Created ASC' => _t('JobHolder.CREATEASC', 'Created Ascending')
+				'Created ASC' => _t('JobHolder.CREATEASC', 'Created Ascending'),	
+				'LastEdited DESC' => _t('JobHolder.EDITEDDESC', 'Last Edited Descending'),
+				'LastEdited ASC' => _t('JobHolder.EDITEDASC', 'Last Edited Ascending')
 			)))
 		));
 		
