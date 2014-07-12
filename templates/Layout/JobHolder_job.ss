@@ -1,5 +1,5 @@
 <% if Job %>
-	<% control Job %>
+	<% with Job %>
 		<h2>$Title <small>Posted $LastEdited.Ago</small></h2>
 		<div id="JobDetail">
 			<p class="companyInfo">
@@ -17,5 +17,5 @@
 		
 		
 		<p id="GoBackHome"><a href="$Top.Link">See The Full List of Jobs</a> <a href="$Top.Link(edit)/$ID" class="button">Edit Listing</a> <a class="button" href="$Top.Link(delete)/$ID">Delete</a></p>
-	<% end_control %>
+	<% end_with %>
 <% end_if %>

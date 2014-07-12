@@ -1,11 +1,6 @@
 <?php
 
 /**
- * The main Job object. Stores information about the position and who
- * submitted it.
- *
- * To extend the fields and options in this use your own {@link DataObjectDecorator}
- *
  * @package jobboard
  */
 class Job extends DataObject {
@@ -13,11 +8,17 @@ class Job extends DataObject {
 	/**
 	 * @var array Names of required fields
 	 */
-	private static $required_fields = array('Title', 'Content', 'ApplyContent', 'Email');
+	private static $required_fields = array(
+		'Title', 'Content', 'ApplyContent', 'Email'
+	);
 	
-	static $db = array(
+	/**
+	 * @var array
+	 */
+	private static $db = array(
 		'Title' 		=> 'Varchar(255)',
 		'Content'		=> 'HTMLText',
+		'Moderated'		=> 'Boolean',
 		'Company' 		=> 'Varchar(200)',
 		'URL' 			=> 'Varchar(200)',
 		'ApplyContent' 	=> 'HTMLText',
@@ -28,11 +29,24 @@ class Job extends DataObject {
 		'Slug' 			=> 'Varchar(200)'
 	);
 	
-	static $has_one = array(
+	/**
+	 * @var array
+	 */
+	private static $has_one = array(
 		'Member' => 'Member'
 	);
 	
-	static $price_guides = array(
+	/**
+	 * @var array
+	 */
+	private static $defaults = array(
+		'Moderated' => 0
+	);
+
+	/**
+	 * @var array
+	 */
+	private static $price_guides = array(
 		'$0 - $500'			=> '$0 - $500',
 		'$501 - $2,000'		=> '$501 - $2,000',
 		'$2,001 - $10,000'	=> '$2,001 - $10,000',
@@ -40,32 +54,15 @@ class Job extends DataObject {
 		'$30,001 - $50,000' => '$30,001 - $50,000',
 		'$50,000+'			=> '$50,000+'
 	);
-	
+
 	/**
-	 * Set the required fields for the submit and edit form
-	 *
-	 * @param array
-	 */
-	public static function set_required_fields($fields) {
-		self::$required_fields = $fields;
-	}
-	
-	/**
-	 * Returns the required fields
-	 *
-	 * @param array
-	 */
-	public static function get_required_fields() {
-		return self::$required_fields;
-	}
-	
-	/**
-	 * When saving the job ensure we have a URL generated
+	 * When saving the job ensure we have a URL generated.
 	 *
 	 * @return void
 	 */
-	function onBeforeWrite() {
+	public function onBeforeWrite() {
 		parent::onBeforeWrite();
+		
 		if(!$this->Slug) {
 			$str = strtolower(trim($this->Title));
 			$str = preg_replace('/[^a-z0-9-]/', '-', $str);
@@ -75,8 +72,11 @@ class Job extends DataObject {
 			$check = 0;
 			$query = $str;
 			$return = false;
+
 			while(DB::query("SELECT COUNT(*) FROM \"Job\" WHERE \"Slug\" = '$query'")->value() > 0) {
-				if($check == 20) break; // something went wrong
+				if($check == 20) {
+					break; // something went wrong
+				}
 				
 				$query = $str .'-'. substr(md5(rand()), 0, 16);
 				
@@ -91,7 +91,7 @@ class Job extends DataObject {
 	/**
 	 * @return FieldSet
 	 */
-	function getFields() {
+	public function getFields() {
 		$email = ($member = Member::currentUser()) ? $member->Email : "";
 		
 		// reduce tinymce
@@ -114,6 +114,10 @@ class Job extends DataObject {
 			new DropdownField('Location', 'Location', Geoip::getCountryDropDown(), null, null, 'Anywhere')
 		);
 		
+		if(Permission::check('ADMIN')) {
+			$fields->push(new CheckboxField('Moderated'));
+		}
+
 		$this->extend('updateFields', $fields);
 		
 		return $fields;
@@ -122,46 +126,45 @@ class Job extends DataObject {
 	/**
 	 * @return RequiredFields
 	 */
-	function getValidator() {
+	public function getValidator() {
 		return ($fields = self::get_required_fields()) ? new RequiredFields($fields) : false;
 	}
 	
 	/**
 	 * @return string
 	 */
-	function Link() {
+	public function Link($action = "") {
 		$holder = DataObject::get_one('JobHolder');
 		
-		return ($holder) ? $holder->Link('job/'.$this->Slug) : false;
+		return Controller::join_links(
+			Director::baseURL(), $holder->RelativeLink('job'), $action, $this->Slug
+		);
 	}
 
 	/** 
 	 * @return string
 	 */
-	function AbsoluteLink() {
-		$holder = DataObject::get_one('JobHolder');
-		
-		return ($holder) ? $holder->AbsoluteLink('job/'.$this->Slug) : false;
+	public function AbsoluteLink($action = "") {
+		return Director::absoluteURL($this->Link($action));
 	}
-	
+
 	/**
-	 * Ensure the URL entered begins with http
+	 * Ensure the URL entered begins with http.
 	 *
 	 * @return string
 	 */
-	function getNiceURL() {
-		return (substr($this->URL, 0, 4) != "http") ? "http://".$this->URL : $this->URL;
+	public function getNiceURL() {
+		return (substr($this->URL, 0, 4) != "http") ? "http://". $this->URL : $this->URL;
 	}
 	
 
 	/**
-	 * Return the full country name for the 2 letter country code this
-	 * has stored in the database
+	 * Return the full country name for the 2 letter country code this has 
+	 * stored in the database.
 	 *
 	 * @return string
 	 */
-	function getNiceLocation() {
-		return ($this->Location) ? Geoip::countryCode2name($this->Location) : "Anywhere	";
+	public function getNiceLocation() {
+		return ($this->Location) ? Geoip::countryCode2name($this->Location) : "Anywhere";
 	}
 }
-

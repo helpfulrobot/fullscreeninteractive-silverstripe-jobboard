@@ -3,7 +3,7 @@ $Content
 <% if ShowJobs %>
 	<% if Jobs %>
 		<ul id="JobListings">
-			<% control Jobs %>
+			<% loop Jobs %>
 				<li class="$EvenOdd">
 			 		<h3><a href="$Link">$Title.LimitCharacters(35)</a>
 					<small>$LastEdited.Ago</small>
@@ -14,7 +14,7 @@ $Content
 					</p>
 					<p class="listingType">$Type</p>
 				</li>
-			<% end_control %>
+			<% end_loop %>
 		</ul>
 	<% else %>
 		<p class="no-listing">Sorry no jobs available. <a href="$Link(post)">Add one</a></p>

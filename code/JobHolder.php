@@ -3,25 +3,27 @@
 /**
  * Job Holder.
  *
- * Acts as the main page for the {@link Job} listings
+ * Acts as the main page for the {@link Job} listings.
  *
  * @package jobboard
  */
 class JobHolder extends Page {
 	
-	static $db = array(
+	private static $db = array(
 		'TermsAndConditionsText' => 'HTMLText',
-		'EmailFromAddress' => 'Varchar',
-		'EmailSubject' => 'Varchar',
+		'EmailFromAddress' => 'Varchar(100)',
+		'EmailSubject' => 'Varchar(100)',
+		'RequireModeration' => 'Boolean',
 		'NotifyAddress' => 'Varchar(100)',
 		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC, LastEdited DESC, LastEdited ASC", "RAND()")'
 	);
 	
-	function getCMSFields() {
+	public function getCMSFields() {
 		$fields = parent::getCMSFields();
 		
 		$fields->addFieldsToTab('Root.Content.JobOptions', array(
 			new HtmlEditorField('TermsAndConditionsText', _t('JobHolder.TERMSANDCONDITIONS', 'Terms and Conditions text')),
+			new CheckboxField('RequireModeration', _t('JobHolder.REQUIREMODERATION', 'Require moderation')),
 			new EmailField('EmailFromAddress', _t('JobHolder.POSTEDFROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
 			new EmailField('NotifyAddress', _t('JobHolder.NOTIFYEMAILADDRESS', 'Email to notify when job posted')),
 			new TextField('EmailSubject', _t('JobHolder.POSTEDEMAILSUBJECT', 'Job posted email subject')),
@@ -31,7 +33,7 @@ class JobHolder extends Page {
 				'Created ASC' => _t('JobHolder.CREATEASC', 'Created Ascending'),	
 				'LastEdited DESC' => _t('JobHolder.EDITEDDESC', 'Last Edited Descending'),
 				'LastEdited ASC' => _t('JobHolder.EDITEDASC', 'Last Edited Ascending')
-			)))
+			))
 		));
 		
 		return $fields;
@@ -64,9 +66,24 @@ class JobHolder_Controller extends Page_Controller {
 	 */
 	function index() {
 		return array(
-			'Jobs' => DataObject::get('Job', "\"isActive\" = '1'", $this->JobSortMode),
+			'Jobs' => $this->getJobs(),
 			'ShowJobs' => true
 		);
+	}
+
+	/**
+	 * @return DataObjectSet
+	 */
+	function getJobs() {
+		$where = "\"isActive\" = '1'";
+
+		if($this->RequireModeration) {
+			$where += " AND \"Moderated\" = '1'";
+		}
+
+		$jobs = DataObject::get('Job', "$where", $this->JobSortMode),
+
+		return $jobs;
 	}
 
 	/**
@@ -78,10 +95,23 @@ class JobHolder_Controller extends Page_Controller {
 		if($this->urlParams['Action'] == "job") {
 			$slug = Convert::raw2sql($this->urlParams['ID']);
 			
-			if(!$slug) return $this->httpError('404');
+			if(!$slug) {
+				return $this->httpError('404');
+			}
 		
 			$job = DataObject::get_one('Job', "\"Slug\" = '$slug' AND \"isActive\" = '1'");		
-			if(!$job) return $this->httpError('404');
+			
+			if(!$job) {
+				return $this->httpError('404');
+			}
+
+			if($this->RequireModeration) {
+				if(!$job->Moderated)
+					if(!isset($_GET['asp'])) {
+						return $this->httpError('400');
+					}
+				}
+			}
 			
 			return array(
 				'Job' => $job,
@@ -148,6 +178,7 @@ class JobHolder_Controller extends Page_Controller {
 		
 		$email = new Email($from, $data['Email'], $subject);
 		$password = false;
+		
 		if(!$member) {
 			$member = new Member();
 			$member->Email = $SQL_email;
@@ -164,6 +195,7 @@ class JobHolder_Controller extends Page_Controller {
 			'Member' => $member,
 			'Password' => $password,
 			'FirstPost' => ($password) ? true : false,
+			'Holder' => $this,
 			'Job' => $job
 		));
 		
@@ -171,7 +203,7 @@ class JobHolder_Controller extends Page_Controller {
 			$email->setBcc($this->NotifyAddress);
 			
 		$member->logIn();
-					
+		
 		$email->send();
 		$job->MemberID = $member->ID;
 		$job->write();
@@ -204,24 +236,26 @@ class JobHolder_Controller extends Page_Controller {
 		// see if they are logged in
 		$member = Member::currentUser();
 
-		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) return Security::permissionFailure($this);
+		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) 
+			return Security::permissionFailure($this);
 		
 		return array(
 			'Form' => $this->EditJobForm(),
 			'CurrentJob' => $job
 		);
 	}
-	
+
 	function EditJobForm() {
 		$job = (Director::urlParam('ID')) ? DataObject::get_by_id("Job", Director::urlParam('ID')) : null;
 		
-		if($job && $job->isActive != 1) return $this->httpError(404);
+		if($job && $job->isActive != 1) {
+			return $this->httpError(404);
+		}
 		 
 		$member = Member::currentUser();
 
 		$fields = singleton('Job')->getFields();
 
-		
 		$actions = new FieldSet(
 			new FormAction('doEditJobForm', _t('JobHolder.EDITLISTING','Edit Listing'))
 		);
@@ -243,41 +277,12 @@ class JobHolder_Controller extends Page_Controller {
 			$job = DataObject::get_by_id('Job', $data['JobID']);
 			
 			// check user has permission
-			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) return Security::permissionFailure($this);
-
-			// check if they have assigned this to another member
-			$member = DataObject::get_one("Member", "Email = '". Convert::raw2sql($data['Email']) . "'");
-		
-			// send prepare email 
-			$from = ($this->EmailFromAddress) ? $this->FromEmailAddress : Email::getAdminEmail();
-			$subject = ($this->EmailSubject) ? $this->EmailSubject : _t('JobHolder.EMAILSUBJECT', 'Thanks for your job listing');
-
-			$email = new Email($from, $data['Email'], $subject);
-
-			if(!$member) {
-				$member = new Member();
-				$member->Email = $SQL_email;
-				$member->FirstName = isset($data['Company']) ? $data['Company'] : false;
-				$password = Member::create_new_password();
-				$member->Password = $password;
-				$member->write();
-				$member->addToGroupByCode('job-posters', _t('JobHolder.JOBPOSTERSGROUP','Job Posters'));
-				$first = true;
-			
-				// send the welcome email.
-				$email->setTemplate('JobPosting');
-				$email->populateTemplate(array(
-					'Member' => $member,
-					'Password' => $password,
-					'FirstPost' => true,
-					'Job' => $job
-				));
+			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) {
+				return Security::permissionFailure($this);
 			}
-			
+
 			// save the job
 			$form->saveInto($job);
-			$job->isActive = 1;
-			$job->MemberID = $member->ID;
 			$job->write();
 		}
 		
