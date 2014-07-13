@@ -45,7 +45,7 @@ class JobHolder extends Page {
  */
 class JobHolder_Controller extends Page_Controller {
 	
-	public static $allowed_actions = array(
+	private static $allowed_actions = array(
 		'index',
 		'job',
 		'post',
@@ -81,7 +81,7 @@ class JobHolder_Controller extends Page_Controller {
 			$where += " AND \"Moderated\" = '1'";
 		}
 
-		$jobs = DataObject::get('Job', "$where", $this->JobSortMode),
+		$jobs = DataObject::get('Job', "$where", $this->JobSortMode);
 
 		return $jobs;
 	}
@@ -106,7 +106,7 @@ class JobHolder_Controller extends Page_Controller {
 			}
 
 			if($this->RequireModeration) {
-				if(!$job->Moderated)
+				if(!$job->Moderated) {
 					if(!isset($_GET['asp'])) {
 						return $this->httpError('400');
 					}
