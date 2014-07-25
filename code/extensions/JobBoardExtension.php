@@ -1,53 +1,15 @@
 <?php
 
 /**
- * Job Holder.
- *
- * Acts as the main page for the {@link Job} listings.
- *
  * @package jobboard
  */
-class JobHolder extends Page {
-	
-	private static $db = array(
-		'TermsAndConditionsText' => 'HTMLText',
-		'EmailFromAddress' => 'Varchar(100)',
-		'EmailSubject' => 'Varchar(100)',
-		'RequireModeration' => 'Boolean',
-		'NotifyAddress' => 'Varchar(100)',
-		'JobSortMode' => 'Enum("RAND(),Created DESC, Created ASC, LastEdited DESC, LastEdited ASC", "RAND()")'
-	);
-	
-	public function getCMSFields() {
-		$fields = parent::getCMSFields();
-		
-		$fields->addFieldsToTab('Root.Content.JobOptions', array(
-			new HtmlEditorField('TermsAndConditionsText', _t('JobHolder.TERMSANDCONDITIONS', 'Terms and Conditions text')),
-			new CheckboxField('RequireModeration', _t('JobHolder.REQUIREMODERATION', 'Require moderation')),
-			new EmailField('EmailFromAddress', _t('JobHolder.POSTEDFROMEMAILADDRESS', 'Job posted email from address (set to a valid email address)')),
-			new EmailField('NotifyAddress', _t('JobHolder.NOTIFYEMAILADDRESS', 'Email to notify when job posted')),
-			new TextField('EmailSubject', _t('JobHolder.POSTEDEMAILSUBJECT', 'Job posted email subject')),
-			new DropdownField('JobSortMode', _t('JobHolder.JOBLISTINGSORT', 'Job Listing Sort'), array(
-				'RAND()' => _t('JobHolder.RANDOM', 'Random'),
-				'Created DESC' => _t('JobHolder.CREATEDDESC', 'Created Descending'),
-				'Created ASC' => _t('JobHolder.CREATEASC', 'Created Ascending'),	
-				'LastEdited DESC' => _t('JobHolder.EDITEDDESC', 'Last Edited Descending'),
-				'LastEdited ASC' => _t('JobHolder.EDITEDASC', 'Last Edited Ascending')
-			))
-		));
-		
-		return $fields;
-	}
-}
+class JobBoardExtension extends Extension {
 
-/**
- * @package jobboard
- */
-class JobHolder_Controller extends Page_Controller {
-	
+	/**
+	 * @var array
+	 */
 	private static $allowed_actions = array(
-		'index',
-		'job',
+		'show',
 		'post',
 		'AddJobForm',
 		'edit',
@@ -58,40 +20,26 @@ class JobHolder_Controller extends Page_Controller {
 		'updated',
 		'removed',
 	);
+
+	/**
+	 * @return DataList
+	 */
+	public function getActiveModeratedJobs($filters = array()) {
+		$filters = array_merge($filters, array(
+			"isActive" => 1,
+			"Moderated" => 1
+		));
+
+		return Job::get()->filter($filters);
+	}
 	
-	/**
-	 * Root index action. Displays the list of jobs
-	 *
-	 * @return array
-	 */
-	function index() {
-		return array(
-			'Jobs' => $this->getJobs(),
-			'ShowJobs' => true
-		);
-	}
-
-	/**
-	 * @return DataObjectSet
-	 */
-	function getJobs() {
-		$where = "\"isActive\" = '1'";
-
-		if($this->RequireModeration) {
-			$where += " AND \"Moderated\" = '1'";
-		}
-
-		$jobs = DataObject::get('Job', "$where", $this->JobSortMode);
-
-		return $jobs;
-	}
 
 	/**
 	 * Handler for displaying a job - home/job/{{$slug}}
 	 *
 	 * @return array
 	 */
-	function job() {
+	public function show() {
 		if($this->urlParams['Action'] == "job") {
 			$slug = Convert::raw2sql($this->urlParams['ID']);
 			
@@ -99,7 +47,10 @@ class JobHolder_Controller extends Page_Controller {
 				return $this->httpError('404');
 			}
 		
-			$job = DataObject::get_one('Job', "\"Slug\" = '$slug' AND \"isActive\" = '1'");		
+			$job = Job::get()->filter(array(
+				"Slug" => $slug,
+				"isActive" => 1
+			))->first();		
 			
 			if(!$job) {
 				return $this->httpError('404');
@@ -125,7 +76,7 @@ class JobHolder_Controller extends Page_Controller {
 	 *
 	 * @return array
 	 */
-	function post() {
+	public function post() {
 		return array(
 			'Title' => DBField::create('HTMLText',_t('JobHolder.CREATEPOSTING','Create a new Posting')),
 			'Form' => $this->AddJobForm()
@@ -137,10 +88,11 @@ class JobHolder_Controller extends Page_Controller {
 	 * 
 	 * @return Form
 	 */
-	function AddJobForm() {
+	public function AddJobForm() {
 		$fields = singleton('Job')->getFields();
 		
 		$fields->push(new LiteralField('Conditions', $this->TermsAndConditionsText));
+
 		$actions = new FieldSet(
 			new FormAction('doConfirmAddJobForm', 'Place Listing')
 		);
@@ -149,16 +101,20 @@ class JobHolder_Controller extends Page_Controller {
 
 		$form = new Form($this, 'AddJobForm', $fields, $actions, $required);
 		
-		if(class_exists('SpamProtectorManager'))
+		if(class_exists('SpamProtectorManager')) {
 			SpamProtectorManager::update_form($form);
+		}
 		
 		return $form;
 	}
 	
 	/**
 	 * Add a job 
+	 *
+	 * @param array $data
+	 * @param Form $form
 	 */
-	function doConfirmAddJobForm($data, $form) {
+	public function doConfirmAddJobForm($data, $form) {
 		// save the data
 		$job = new Job();
 		$form->saveInto($job);
@@ -199,8 +155,9 @@ class JobHolder_Controller extends Page_Controller {
 			'Job' => $job
 		));
 		
-		if($this->NotifyAddress) 
+		if($this->NotifyAddress) {
 			$email->setBcc($this->NotifyAddress);
+		}
 			
 		$member->logIn();
 		
@@ -212,10 +169,14 @@ class JobHolder_Controller extends Page_Controller {
 	}
 
 	/**
-	 * Thanks page
+	 * Thanks page.
+	 *
+	 * @return array
 	 */
-	function thanks() {
-		$job = (Session::get('JobID')) ? DataObject::get_by_id('Job', Session::get('JobID')) : false;
+	public function thanks() {
+		if($job = Session::get('JobID')) {
+			$job = Job::get()->byId($job);
+		}
 
 		return array(
 			'Job' => $job
@@ -224,20 +185,29 @@ class JobHolder_Controller extends Page_Controller {
 	
 	/**
 	 * Edit a Job
+	 *
+	 * @return array
 	 */
-	function edit() {
+	public function edit() {
 		// try and get a job
 		$id = $this->urlParams['ID'];
-		if(!$id) return $this->httpError(404);
+
+		if(!$id) {
+			return $this->httpError(404);
+		}
 	
-		$job = DataObject::get_by_id("Job", $id);
-		if(!$job) return $this->httpError(404);
+		$job = Job::get()->byId($id);
+
+		if(!$job) {
+			return $this->httpError(404);
+		}
 
 		// see if they are logged in
 		$member = Member::currentUser();
 
-		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) 
+		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) {
 			return Security::permissionFailure($this);
+		}
 		
 		return array(
 			'Form' => $this->EditJobForm(),
@@ -245,10 +215,14 @@ class JobHolder_Controller extends Page_Controller {
 		);
 	}
 
-	function EditJobForm() {
-		$job = (Director::urlParam('ID')) ? DataObject::get_by_id("Job", Director::urlParam('ID')) : null;
+	/**
+	 * @return Form
+	 */
+	public function EditJobForm() {
+		$id = Director::urlParam('ID');
+		$job = ($id) ? Job::get()->byId($id) : null;
 		
-		if($job && $job->isActive != 1) {
+		if(!$job || $job->isActive != 1) {
 			return $this->httpError(404);
 		}
 		 
@@ -272,9 +246,13 @@ class JobHolder_Controller extends Page_Controller {
 		return $form;
 	}
 	
-	function doEditJobForm($data, $form) {
+	/**
+	 * @param array $data
+	 * @param Form $form
+	 */
+	public function doEditJobForm($data, $form) {
 		if(isset($data['JobID'])) {
-			$job = DataObject::get_by_id('Job', $data['JobID']);
+			$job = Job::get()->byId($data['JobID']);
 			
 			// check user has permission
 			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) {
@@ -289,19 +267,29 @@ class JobHolder_Controller extends Page_Controller {
 		return $this->redirect($this->Link('updated'));
 	}
 	
-	function delete() {
+	/**
+	 * @return array
+	 */
+	public function delete() {
 		// try and get a job
 		$id = Director::urlParam('ID');
-		if(!$id) return $this->httpError(404);
+		
+		if(!$id) {
+			return $this->httpError(404);
+		}
 
-		$job = DataObject::get_by_id("Job", $id);
+		$job = Job::get()->byId($id);
 
-		if(!$job) return $this->httpError(404);
+		if(!$job) {
+			return $this->httpError(404);
+		}
 
 		// see if they are logged in
 		$member = Member::currentUser();
 
-		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) return Security::permissionFailure($this);
+		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) {
+			return Security::permissionFailure($this);
+		}
 
 		return array(
 			'Form' => $this->DeleteJobForm(),
@@ -309,7 +297,10 @@ class JobHolder_Controller extends Page_Controller {
 		);
 	}
 	
-	function DeleteJobForm() {
+	/**
+	 * @return Form
+	 */
+	public function DeleteJobForm() {
 		return new Form($this, 'DeleteJobForm', 
 			new FieldSet(
 				new HiddenField('JobID', 'Job ID', (Director::urlParam('ID')) ? Director::urlParam('ID') : ""),
@@ -325,16 +316,25 @@ class JobHolder_Controller extends Page_Controller {
 		);
 	}
 	
-	function doDeleteJobForm($data, $form) {
+	/**
+	 * Delete a given job
+	 *
+	 * @param array $data
+	 * @param Form $form
+	 */
+	public function doDeleteJobForm($data, $form) {
 		if(isset($data['JobID'])) {
 			$job = DataObject::get_by_id('Job', $data['JobID']);
 
 			// check user has permission
-			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) return Security::permissionFailure($this);
+			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) {
+				return Security::permissionFailure($this);
+			}
 			
 			$job->isActive = false;
 			$job->write();
 		}
+		
 		return $this->redirect($this->Link('removed'));	
 	}
 }
