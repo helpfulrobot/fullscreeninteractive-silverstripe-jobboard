@@ -6,22 +6,8 @@
 class JobBoardExtension extends Extension {
 
 	/**
-	 * @var array
-	 */
-	private static $allowed_actions = array(
-		'show',
-		'post',
-		'AddJobForm',
-		'edit',
-		'EditJobForm',
-		'delete',
-		'DeleteJobForm',
-		'thanks',
-		'updated',
-		'removed',
-	);
-
-	/**
+	 * Returns a list of the shows to be shown on the site.
+	 *
 	 * @return DataList
 	 */
 	public function getActiveModeratedJobs($filters = array()) {
@@ -35,306 +21,181 @@ class JobBoardExtension extends Extension {
 	
 
 	/**
-	 * Handler for displaying a job - home/job/{{$slug}}
+	 * Handler for displaying a job.
 	 *
-	 * @return array
+	 * If the job cannot be viewed or doesn't exist then this will return a 
+	 * HTTPResponse with the error code.
+	 *
+	 * @return array|HTTPResponse
 	 */
-	public function show() {
-		if($this->urlParams['Action'] == "job") {
-			$slug = Convert::raw2sql($this->urlParams['ID']);
-			
-			if(!$slug) {
-				return $this->httpError('404');
-			}
-		
-			$job = Job::get()->filter(array(
-				"Slug" => $slug,
-				"isActive" => 1
-			))->first();		
-			
-			if(!$job) {
-				return $this->httpError('404');
-			}
+	public function getJobBoardShowAction() {
+		$job = $this->getJobFromParams();
 
-			if($this->RequireModeration) {
-				if(!$job->Moderated) {
-					if(!isset($_GET['asp'])) {
-						return $this->httpError('400');
-					}
+		if(!$job || $job->isActive != 1) {
+			return $this->owner->httpError(404);
+		}
+
+		if(Config::inst()->get('Job', 'require_moderation') || $this->owner->RequireModeration) {
+			if(!$job->Moderated) {
+				if(!isset($_GET['asp'])) {
+					return $this->owner->httpError('400');
 				}
 			}
-			
-			return array(
-				'Job' => $job,
-				'CurrentJob' => $job
-			);
 		}
-	}
-	
-	/**
-	 * Handler for posting a job
-	 *
-	 * @return array
-	 */
-	public function post() {
+		
 		return array(
-			'Title' => DBField::create('HTMLText',_t('JobHolder.CREATEPOSTING','Create a new Posting')),
-			'Form' => $this->AddJobForm()
+			'Title' => $job->Title,
+			'Job' => $job,
+			'CurrentJob' => $job
 		);
 	}
 	
 	/**
-	 * Form for adding a job to the page
-	 * 
-	 * @return Form
-	 */
-	public function AddJobForm() {
-		$fields = singleton('Job')->getFields();
-		
-		$fields->push(new LiteralField('Conditions', $this->TermsAndConditionsText));
-
-		$actions = new FieldSet(
-			new FormAction('doConfirmAddJobForm', 'Place Listing')
-		);
-		
-		$required = singleton('Job')->getValidator();
-
-		$form = new Form($this, 'AddJobForm', $fields, $actions, $required);
-		
-		if(class_exists('SpamProtectorManager')) {
-			SpamProtectorManager::update_form($form);
-		}
-		
-		return $form;
-	}
-	
-	/**
-	 * Add a job 
+	 * Handler for posting a job.
 	 *
-	 * @param array $data
-	 * @param Form $form
-	 */
-	public function doConfirmAddJobForm($data, $form) {
-		// save the data
-		$job = new Job();
-		$form->saveInto($job);
-		$job->isActive = true;
-		$job->write();
-		
-		Session::set('JobID', $job->ID);
-		
-		// look for a member with that email.
-		$SQL_email = Convert::raw2sql($data['Email']);
-		
-		$member = DataObject::get_one('Member', "Email = '$SQL_email'");
-		
-		// send prepare email 
-		$from = ($this->EmailFromAddress) ? $this->FromEmailAddress : Email::getAdminEmail();
-		$subject = ($this->EmailSubject) ? $this->EmailSubject : _t('JobHolder.EMAILSUBJECT', 'Thanks for your job listing');
-		
-		$email = new Email($from, $data['Email'], $subject);
-		$password = false;
-		
-		if(!$member) {
-			$member = new Member();
-			$member->Email = $SQL_email;
-			$member->FirstName = isset($data['Company']) ? $data['Company'] : false;
-			$password = Member::create_new_password();
-			$member->Password = $password;
-			$member->write();
-			$member->addToGroupByCode('job-posters', _t('JobHolder.JOBPOSTERSGROUP','Job Posters'));
-		}
-			
-		// send the welcome email.
-		$email->setTemplate('JobPosting');
-		$email->populateTemplate(array(
-			'Member' => $member,
-			'Password' => $password,
-			'FirstPost' => ($password) ? true : false,
-			'Holder' => $this,
-			'Job' => $job
-		));
-		
-		if($this->NotifyAddress) {
-			$email->setBcc($this->NotifyAddress);
-		}
-			
-		$member->logIn();
-		
-		$email->send();
-		$job->MemberID = $member->ID;
-		$job->write();
-		
-		return $this->redirect($this->Link('thanks'));
-	}
-
-	/**
-	 * Thanks page.
+	 * Passes a new instance of a JobBoardForm to the template. Any permission
+	 * checking or authentication can be handled by your caller function.
 	 *
 	 * @return array
 	 */
-	public function thanks() {
+	public function getJobBoardPostAction() {
+		return array(
+			'Title' => DBField::create_field('HTMLText', _t('Jobboard.LISTNEWJOB','List a new job')),
+			'Form' => new JobBoardForm($this->owner)
+		);
+	}
+
+	/**
+	 * Handler for the job thanks page. 
+	 *
+	 * Mostly this action requires template work so the caller function is in
+	 * charge of doing most of the work but this will at least pass back the
+	 * current {@link Job} in scope.
+	 *
+	 * @return array
+	 */
+	public function getJobBoardThanksAction() {
 		if($job = Session::get('JobID')) {
 			$job = Job::get()->byId($job);
 		}
 
 		return array(
+			'Title' => DBField::create_field('HTMLText', _t('Jobboard.THANKS','Thanks')),
 			'Job' => $job
 		);
 	}
 	
 	/**
-	 * Edit a Job
+	 * Handler for the Job editing view.
+	 *
+	 * If the user does not have permission or the job doesn't exist, then a 
+	 * {@link SS_HTTPResponse} object is returned.
 	 *
 	 * @return array
 	 */
-	public function edit() {
-		// try and get a job
-		$id = $this->urlParams['ID'];
-
-		if(!$id) {
-			return $this->httpError(404);
-		}
-	
-		$job = Job::get()->byId($id);
-
-		if(!$job) {
-			return $this->httpError(404);
+	public function getJobBoardEditAction() {
+		if(!$job = $this->getJobFromParams()) {
+			return $this->owner->httpError(404);
 		}
 
-		// see if they are logged in
 		$member = Member::currentUser();
 
 		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) {
-			return Security::permissionFailure($this);
+			return Security::permissionFailure($this->owner);
 		}
 		
 		return array(
-			'Form' => $this->EditJobForm(),
+			'Title' => DBField::create_field('HTMLText', _t('Jobboard.EDITJOB','Edit job')),
+			'Form' => new JobBoardForm($this->owner, $job),
 			'CurrentJob' => $job
 		);
 	}
 
 	/**
-	 * @return Form
+	 * @return Job
 	 */
-	public function EditJobForm() {
-		$id = Director::urlParam('ID');
-		$job = ($id) ? Job::get()->byId($id) : null;
+	public function getJobFromParams() {
+		$params = $this->owner->getURLParams();
 		
-		if(!$job || $job->isActive != 1) {
-			return $this->httpError(404);
+		if(!$params['ID']) {
+			return false;
 		}
-		 
-		$member = Member::currentUser();
 
-		$fields = singleton('Job')->getFields();
+		$job = Job::get()->filter(array(
+			'Slug' => $params['ID']
+		))->first();
 
-		$actions = new FieldSet(
-			new FormAction('doEditJobForm', _t('JobHolder.EDITLISTING','Edit Listing'))
-		);
-		
-		$required = singleton('Job')->getValidator();
-
-		$form = new Form($this, 'EditJobForm', $fields, $actions, $required);
-		
-		if($job) {
-			$form->loadDataFrom($job);
-			$form->Fields()->push(new HiddenField('JobID', "Job ID",$job->ID));
-		}
-		
-		return $form;
+		return $job;
 	}
-	
-	/**
-	 * @param array $data
-	 * @param Form $form
-	 */
-	public function doEditJobForm($data, $form) {
-		if(isset($data['JobID'])) {
-			$job = Job::get()->byId($data['JobID']);
-			
-			// check user has permission
-			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) {
-				return Security::permissionFailure($this);
-			}
 
-			// save the job
-			$form->saveInto($job);
-			$job->write();
-		}
-		
-		return $this->redirect($this->Link('updated'));
-	}
-	
 	/**
 	 * @return array
 	 */
-	public function delete() {
-		// try and get a job
-		$id = Director::urlParam('ID');
-		
-		if(!$id) {
-			return $this->httpError(404);
-		}
-
-		$job = Job::get()->byId($id);
-
-		if(!$job) {
+	public function getJobBoardDeleteAction() {
+		if(!$job = $this->getJobFromParams()) {
 			return $this->httpError(404);
 		}
 
 		// see if they are logged in
-		$member = Member::currentUser();
-
-		if(!$member || ($job->MemberID != $member->ID && !Permission::check('ADMIN'))) {
-			return Security::permissionFailure($this);
+		if(!$job->canEdit()) {
+			return Security::permissionFailure($this->owner);
 		}
 
 		return array(
-			'Form' => $this->DeleteJobForm(),
+			'Form' => new JobBoardDeleteForm($this->owner, $job),
 			'CurrentJob' => $job
 		);
 	}
-	
-	/**
-	 * @return Form
-	 */
-	public function DeleteJobForm() {
-		return new Form($this, 'DeleteJobForm', 
-			new FieldSet(
-				new HiddenField('JobID', 'Job ID', (Director::urlParam('ID')) ? Director::urlParam('ID') : ""),
-				new LiteralField('Confirm', '<h2>Confirm Delete</h2>
-					<p>Clicking Delete will remove this listing from the site and the data will be removed.</p><p>You cannot undo this action</p>'
-				),
-				new CheckboxField('ConfirmTick', 
-					_t('JobHolder.DELETECONFIRMATIONWARNING','I understand that I will not be able to restore this listing after clicking delete')	
-				)
-			),
-			new FieldSet(new FormAction('doDeleteJobForm', _t('JobHolder.CONFIRMDELETE','Confirm Delete'))),
-			new RequiredFields('ConfirmTick')
-		);
-	}
-	
-	/**
-	 * Delete a given job
-	 *
-	 * @param array $data
-	 * @param Form $form
-	 */
-	public function doDeleteJobForm($data, $form) {
-		if(isset($data['JobID'])) {
-			$job = DataObject::get_by_id('Job', $data['JobID']);
 
-			// check user has permission
-			if(!$job || ($job->MemberID != Member::currentUserID() && !Permission::check('ADMIN'))) {
-				return Security::permissionFailure($this);
-			}
-			
-			$job->isActive = false;
-			$job->write();
+	/**
+	 * @return string
+	 */
+	public function getJobEmailFromAddress() {
+		if($this->EmailFromAddress) {
+			return $this->EmailFromAddress;
 		}
 		
-		return $this->redirect($this->Link('removed'));	
+		if($email = Config::inst()->get('Job', 'email_from_address')) {
+			return $email;
+		}
+		
+		return Config::inst()->get('Email', 'admin_email');
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getJobEmailSubject() {
+		if($this->EmailSubject) {
+			return $this->EmailSubject;
+		}
+		
+		if($subject = Config::inst()->get('Job', 'email_subject')) {
+			return $subject;
+		}
+
+		return _t('Jobboard.EMAILSUBJECT', 'Thanks for your job listing');
+	}
+
+	/**
+	 * @return boolean
+	 */
+	public function getJobRequireModeration() {
+		if($this->RequireModeration) {
+			return $this->RequireModeration;
+		}
+		
+		return Config::inst()->get('Job', 'require_moderation');
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getJobNotifyAddress() {
+		if($this->NotifyAddress) {
+			return $this->NotifyAddress;
+		}
+		
+		return Config::inst()->get('Job', 'notify_address');
 	}
 }

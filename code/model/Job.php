@@ -6,10 +6,40 @@
 class Job extends DataObject {
 
 	/**
-	 * @var array Names of required fields
+	 * @var boolean $require_moderation
+	 *
+	 * @config
+	 */
+	private static $require_moderation = true;
+	
+	/**
+	 * @var string $email_from_address
+	 *
+	 * @config
+	 */
+	private static $email_from_address;
+
+	/**
+	 * @var string $email_subject
+	 *
+	 * @config
+	 */
+	private static $email_subject;
+
+	/**
+	 * @var string $notify_address
+	 *
+	 * @config
+	 */
+	private static $notify_address;
+
+	/**
+	 * @var array $required_fields
+	 *
+	 * @config
 	 */
 	private static $required_fields = array(
-		'Title', 'Content', 'ApplyContent', 'Email'
+		'Title', 'Email'
 	);
 	
 	/**
@@ -87,6 +117,19 @@ class Job extends DataObject {
 			$this->Slug = ($return) ? $return : $str;
 		}
 	}
+
+	/**
+	 * @param Member
+	 *
+	 * @return boolean
+	 */
+	public function canEdit($member = null) {
+		if(!$member) {
+			$member = Member::currentUser();
+		}
+
+		return (Permission::check('ADMIN') || ($member && $member->ID == $this->MemberID));
+	}
 	
 	/**
 	 * @return FieldSet
@@ -100,19 +143,22 @@ class Job extends DataObject {
 		HtmlEditorConfig::get('job')->setButtonsForLine('1', array('bold','italic','underline','bullist', 'numlist','cut','copy','paste','pastetext','pasteword', 'undo', 'redo'));	
 		HtmlEditorConfig::get('job')->setButtonsForLine('2', array());
 		
-		$fields = new FieldSet(
+		$fields = new FieldList(
 			new HeaderField('JobInformation', 'Job Information'),
 			new TextField('Title', 'Title of Listing <span>(Appears On Main Page)</span>'),
 			new DropdownField('Type', 'Type', $this->dbObject('Type')->enumValues()),
-			new DropdownField('PriceGuide', 'Price Guide ($USD) <span>(Optional)</span>', self::$price_guides, '', null, ''),
+			$guide = new DropdownField('PriceGuide', 'Price Guide ($USD) <span>(Optional)</span>', self::$price_guides),
 			new HtmlEditorField('Content', 'Job Description'),
 			new HtmlEditorField('ApplyContent', 'How to Apply <span>(Include your Contact Details)</span>'),
 			new HeaderField('YourInformation', 'Your Information'),
 			new EmailField('Email', 'Your Email <span>(Required)</span>', $email),
 			new TextField('Company', 'Company Name <span>(Optional)</span>'),
 			new TextField('URL', 'Company URL <span>(Optional) </span>'),
-			new DropdownField('Location', 'Location', Geoip::getCountryDropDown(), null, null, 'Anywhere')
+			$location = new DropdownField('Location', 'Location', Geoip::getCountryDropDown())
 		);
+
+		$guide->setEmptyString('');
+		$location->setEmptyString('');
 		
 		if(Permission::check('ADMIN')) {
 			$fields->push(new CheckboxField('Moderated'));
@@ -127,17 +173,21 @@ class Job extends DataObject {
 	 * @return RequiredFields
 	 */
 	public function getValidator() {
-		return ($fields = self::get_required_fields()) ? new RequiredFields($fields) : false;
+		return ($fields = $this->config()->required_fields) ? new RequiredFields($fields) : false;
 	}
 	
 	/**
 	 * @return string
 	 */
 	public function Link($action = "") {
-		$holder = DataObject::get_one('JobHolder');
-		
+		if(!$action) {
+			$action = 'show';
+		}
+
+		$url = Config::inst()->get('Job', 'job_url');
+
 		return Controller::join_links(
-			Director::baseURL(), $holder->RelativeLink('job'), $action, $this->Slug
+			Director::baseURL(), $url, $action, $this->Slug
 		);
 	}
 

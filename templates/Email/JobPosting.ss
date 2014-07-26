@@ -14,9 +14,9 @@
 
 <h3>Listing Details</h3>
 
-<p>If you would like to remove your listing or edit the details you can make changes to it at <a href="$Job.AbsoluteLink">$Job.AbsoluteLink</a></p>
+<p>If you would like to remove your listing or edit the details you can make changes to it at <a href="$Job.AbsoluteLink?asp=1">$Job.AbsoluteLink</a></p>
 
 <p><strong>Title:</strong> $Job.Title</p>
 
 <p>---<br />
-Thanks,<br /></p>
+Thanks<br /></p>
