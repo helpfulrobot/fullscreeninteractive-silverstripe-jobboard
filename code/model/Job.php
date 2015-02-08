@@ -42,6 +42,13 @@ class Job extends DataObject {
 		'Title', 'Email'
 	);
 	
+	private static $summary_fields = array(
+		'ID',
+		'Title',
+		'Created',
+		'Type'
+	);
+	
 	/**
 	 * @var array
 	 */
