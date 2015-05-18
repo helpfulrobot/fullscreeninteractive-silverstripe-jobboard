@@ -41,7 +41,7 @@ class JobBoardForm extends Form {
 		parent::__construct($controller, 'AddJobForm', $fields, $actions, $required);
 
 		$this->setFormAction('JobBoardFormProcessor/doJobForm');
-		$this->setFormMethod('GET');
+		$this->setFormMethod('POST');
 
 		if($job) {
 			$this->loadDataFrom($job);
