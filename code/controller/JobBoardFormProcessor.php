@@ -16,20 +16,22 @@ class JobBoardFormProcessor extends Controller {
 	 * @param Form $form
 	 */
 	public function doJobForm() {
-		$data = $this->request->getVars();
+		$data = $this->request->postVars();
 		$form = new JobBoardForm($this);
 		$form->loadDataFrom($data);
 
 		$existed = false;
 
-		if(!isset($data['JobID'])) {
+		if(!isset($data['JobID']) && !$data['JobID']) {
 			$job = new Job();
 		} else {
 			$job = Job::get()->byId($data['JobID']);
 			$existed = true;
 
-			if(!$job->canEdit()) {
+			if($job && !$job->canEdit()) {
 				return $this->owner->httpError(404);
+			} else {
+				$job = new Job();
 			}
 		}
 

@@ -1,0 +1,6 @@
+---
+name: jobboard
+---
+Director:
+  rules:
+    'JobBoardFormProcessor' : 'JobBoardFormProcessor'
